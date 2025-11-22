@@ -1,12 +1,12 @@
 import pandas as pd
 from datetime import datetime
-from importlib import resources
+from pathlib import Path
 from dateutil.relativedelta import relativedelta
 
 def read_curve(filename):
-    with resources.files('data').joinpath(filename) as csv:
-        curve = pd.read_csv(csv, sep=';', encoding='utf-8-sig')
-
+    # Ruta relativa desde src/ hacia data/ (un nivel arriba)
+    data_path = Path(__file__).parent.parent / 'data' / filename
+    curve = pd.read_csv(data_path, sep=';', encoding='utf-8-sig')
     return curve
 
 def plot_curve(curve):
