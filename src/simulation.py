@@ -97,16 +97,19 @@ def __calculate_z_spread__(date, bond, curve):
     while (next_coupon_date < date):
         next_coupon_date = next_coupon_date + relativedelta(years=coupon_freq)
 
-    low_barrier = -0.5
-    high_barrier = 0.5
-    tolerance = 0.0001
-    max_iter = 1000000
+    low_barrier = -0.05
+    high_barrier = 0.25
+    tolerance = 0.00001
+    max_iter = 1000
     iteration = 0
+
+    bond['Z Spread'] = 0
     while (iteration < max_iter):
         z_value = (low_barrier + high_barrier) / 2
-        z_spread = __calculate_z_spread__(date, next_coupon_date, maturity_date, nominal, coupon_value, coupon_freq, curve, z_value)
+        z_spread = __z_spread__(date, next_coupon_date, maturity_date, nominal, coupon_value, coupon_freq, curve, z_value)
         if (abs(z_spread - dirty_price) < tolerance):
-            bond['Z Spread'] = z_spread
+            bond['Z Spread'] = z_value * 10000 #Convertir a bps
+            print(z_value)
             break
         if (z_spread > dirty_price):
             low_barrier = z_value
@@ -117,5 +120,5 @@ def __calculate_z_spread__(date, bond, curve):
 
     return bond
 
-def __calculate_z_spreads__(date, df, curve):
+def calculate_z_spreads(date, df, curve):
     return df.apply(lambda bond: __calculate_z_spread__(date, bond, curve), axis = 1)
