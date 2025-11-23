@@ -65,7 +65,57 @@ def __evaluate_bond__(date, bond, curve, bps):
 
     return bond
 
-
 def interpolate(curve, date, column='Discount'):
-    ln_date = to_ln_timestamp(date)
-    return np.interp(ln_date, curve['ln(Date)'], curve[column])
+        ln_date = to_ln_timestamp(date)
+        return np.interp(ln_date, curve['ln(Date)'], curve[column])
+
+def __z_spread__(date, next_coupon_date, maturity_date, nominal, coupon_value, coupon_freq, curve, z_value):
+        t = 0
+        pvz = 0
+        while (next_coupon_date < maturity_date):
+            t = ((next_coupon_date - date).days) / 365.0
+            pvz = pvz + coupon_value / (1 + interpolate(curve, next_coupon_date, 'Zero Rate') / 100 + z_value) ** t
+            next_coupon_date = next_coupon_date + relativedelta(years=coupon_freq)
+
+        return pvz + nominal / (1 + interpolate(curve, maturity_date, 'Zero Rate') / 100 + z_value) ** t
+
+def __calculate_z_spread__(date, bond, curve):
+    dirty_price = bond['Dirty Price']
+
+    coupon = bond['Coupon']
+    nominal = bond['Price']
+    coupon_value = coupon/100 * nominal
+    maturity_date = bond['Maturity']
+    # Si es perpetuo, cogemos la fecha del proximo call
+    if pd.isnull(maturity_date):
+        maturity_date = bond['Next Call Date']
+
+    coupon_freq = bond['Coupon Frequency']
+    first_coupon_date = pd.to_datetime(bond['First Coupon Date'])
+    next_coupon_date = first_coupon_date
+
+    while (next_coupon_date < date):
+        next_coupon_date = next_coupon_date + relativedelta(years=coupon_freq)
+
+    low_barrier = -0.5
+    high_barrier = 0.5
+    tolerance = 0.0001
+    max_iter = 1000000
+    iteration = 0
+    while (iteration < max_iter):
+        z_value = (low_barrier + high_barrier) / 2
+        z_spread = __calculate_z_spread__(date, next_coupon_date, maturity_date, nominal, coupon_value, coupon_freq, curve, z_value)
+        if (abs(z_spread - dirty_price) < tolerance):
+            bond['Z Spread'] = z_spread
+            break
+        if (z_spread > dirty_price):
+            low_barrier = z_value
+        else:
+            high_barrier = z_value
+
+        iteration += 1
+
+    return bond
+
+def __calculate_z_spreads__(date, df, curve):
+    return df.apply(lambda bond: __calculate_z_spread__(date, bond, curve), axis = 1)
