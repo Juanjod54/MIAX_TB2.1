@@ -1,16 +1,33 @@
+import math
+import datetime
+
+import numpy as np
+import matplotlib.pyplot as plt
 import pandas as pd
-from datetime import datetime
 from pathlib import Path
 from dateutil.relativedelta import relativedelta
+
+
+def to_ln_timestamp(date):
+    return math.log(pd.to_datetime(date, dayfirst=True, utc=True).timestamp())
+
+def from_ln_timestamp(ln_timestamp):
+    return datetime.datetime.fromtimestamp((math.e ** ln_timestamp)).strftime('%d/%m/%Y')
 
 def read_curve(filename):
     # Ruta relativa desde src/ hacia data/ (un nivel arriba)
     data_path = Path(__file__).parent.parent / 'data' / filename
     curve = pd.read_csv(data_path, sep=';', encoding='utf-8-sig')
+    # Convertimos las fechas a ln(timestamp) para poder interpolar posteriormente
+    curve['Date'] = curve['Date'].apply(to_ln_timestamp)
     return curve
 
 def plot_curve(curve):
-    curve.plot()
+    curve_plt = curve.copy()
+    columns = curve_plt.columns.drop('Date').values
+    curve_plt['Date'] = curve_plt['Date'].apply(from_ln_timestamp)
+    plt.plot(curve_plt['Date'], curve_plt[columns], label=columns)
+    plt.xticks(curve_plt['Date'][::5], rotation=45)
 
 def evaluate_bond(date, bond, curve, spread):
     clean_price = 0
@@ -39,3 +56,7 @@ def evaluate_bond(date, bond, curve, spread):
     # Calcular el precio sucio
     # Calcular el precio limpio
     # Devolver un DF con todos los nuevos campos
+
+def interpolate(curve, date, column='Discount'):
+    ln_date = to_ln_timestamp(date)
+    return np.interp(ln_date, curve['Date'], curve[column])
