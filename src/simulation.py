@@ -46,9 +46,9 @@ def __evaluate_bond__(date, bond, curve, bps):
         next_coupon_date = next_coupon_date + relativedelta(years=coupon_freq)
     last_coupon_date = next_coupon_date - relativedelta(years=coupon_freq)
 
+    coupon_rate = (next_coupon_date - last_coupon_date).days
     days_from_last_coupon_payment = (date - last_coupon_date).days
-    days_until_next_coupon_payment = (next_coupon_date - date).days
-    accrued_interest = coupon_value * (days_from_last_coupon_payment/days_until_next_coupon_payment if days_until_next_coupon_payment > 0 else 0)
+    accrued_interest = coupon_value * (days_from_last_coupon_payment/coupon_rate if coupon_rate > 0 else 0)
 
     t = 0
     while (next_coupon_date < maturity_date):
@@ -70,17 +70,21 @@ def interpolate(curve, date, column='Discount'):
         return np.interp(ln_date, curve['ln(Date)'], curve[column])
 
 def __z_spread__(date, next_coupon_date, maturity_date, nominal, coupon_value, coupon_freq, curve, z_value):
-        t = 0
         pvz = 0
         while (next_coupon_date < maturity_date):
             t = ((next_coupon_date - date).days) / 365.0
-            pvz = pvz + coupon_value / (1 + interpolate(curve, next_coupon_date, 'Zero Rate') / 100 + z_value) ** t
+            rt = interpolate(curve, next_coupon_date, 'Zero Rate')/100
+            df = math.exp(-rt * t)
+            pvz = pvz + coupon_value * df * math.exp(-z_value * t)
             next_coupon_date = next_coupon_date + relativedelta(years=coupon_freq)
 
-        return pvz + nominal / (1 + interpolate(curve, maturity_date, 'Zero Rate') / 100 + z_value) ** t
+        t = ((maturity_date - date).days) / 365.0
+        rt = interpolate(curve, maturity_date, 'Zero Rate') / 100
+        df = math.exp(-rt * t)
+        return pvz + nominal * df * math.exp(-z_value * t)
 
 def __calculate_z_spread__(date, bond, curve):
-    dirty_price = bond['Dirty Price']
+    market_price = bond['Market Price']
 
     coupon = bond['Coupon']
     nominal = bond['Price']
@@ -98,20 +102,19 @@ def __calculate_z_spread__(date, bond, curve):
         next_coupon_date = next_coupon_date + relativedelta(years=coupon_freq)
 
     low_barrier = -0.05
-    high_barrier = 0.25
-    tolerance = 0.00001
+    high_barrier = 0.20
+    tolerance = 0.0001
     max_iter = 1000
     iteration = 0
 
     bond['Z Spread'] = 0
     while (iteration < max_iter):
         z_value = (low_barrier + high_barrier) / 2
-        z_spread = __z_spread__(date, next_coupon_date, maturity_date, nominal, coupon_value, coupon_freq, curve, z_value)
-        if (abs(z_spread - dirty_price) < tolerance):
+        pvz = __z_spread__(date, next_coupon_date, maturity_date, nominal, coupon_value, coupon_freq, curve, z_value)
+        if (abs(pvz - market_price) < tolerance):
             bond['Z Spread'] = z_value * 10000 #Convertir a bps
-            print(z_value)
             break
-        if (z_spread > dirty_price):
+        if (pvz > market_price):
             low_barrier = z_value
         else:
             high_barrier = z_value
