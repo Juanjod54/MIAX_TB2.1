@@ -33,10 +33,12 @@ def __evaluate_bond__(date, bond, curve, bps):
     coupon = bond['Coupon']
     nominal = bond['Price']
     coupon_value = coupon/100 * nominal
-    maturity_date = bond['Maturity']
+    maturity_date = bond['Next Call Date']
     # Si es perpetuo, cogemos la fecha del proximo call
     if pd.isnull(maturity_date):
-        maturity_date = bond['Next Call Date']
+        maturity_date = bond['Maturity']
+    #if pd.isnull(maturity_date):
+    #    maturity_date = bond['Next Call Date']
 
     coupon_freq = bond['Coupon Frequency']
     first_coupon_date = pd.to_datetime(bond['First Coupon Date'])
