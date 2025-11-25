@@ -176,8 +176,12 @@ def __calculate_ytm__(date, bond, curve):
         return sum(cf / (1 + y / coupon_freq) ** (coupon_freq * t) for t, cf in payment_flows) - clean_price
 
 
-    low_barrier = -0.05
-    high_barrier = 0.20
+   # Verificar cambio de signo
+    low_barrier = 0.0001
+    high_barrier = 1.0
+    if result(low_barrier) * result(high_barrier) > 0:
+        return np.nan
+
     ytm = root_scalar(result, bracket=[low_barrier, high_barrier], method='brentq') # usando el método de bisección
     return ytm.root if ytm.converged else None
 
