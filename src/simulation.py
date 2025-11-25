@@ -28,7 +28,7 @@ def plot_curve(curve):
     curve[['Discount', 'Zero Rate', 'Market Rate']].plot()
 
 def evaluate_bonds(date, df, curve, spread, ytm, marcualay, modificate, convexity):
-    return df.apply(lambda bond: __evaluate_bond__(date, bond, curve, spread, ytm, marcualay, modificate, convexity), axis = 1)
+    return df.apply(lambda bond: __evaluate_bond__(date, bond, curve, spread), axis = 1)
 
 def __evaluate_bond__(date, bond, curve, bps):
     dirty_price = 0
@@ -137,7 +137,7 @@ def calculate_z_spreads(date, df, curve):
 
 def __calculate_ytm__(date, bond, curve):
     coupon = bond['Coupon']
-    nominal = bond['Nominal']
+    nominal = bond['Price']
     coupon_value = coupon * nominal
     
     maturity_date = bond['Next Call Date']
