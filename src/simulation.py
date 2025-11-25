@@ -178,7 +178,7 @@ def calculate_ytms(date, df):
     return df.apply(lambda bond: __calculate_ytm__(date, bond), axis = 1)
 
 def __calculate_duration__ (date, bond):
-    ytm = bond['YTM']
+    ytm = bond['YTM']/100
     nominal = bond['Price']
     coupon = bond['Coupon']/100
     coupon_value = coupon * nominal
@@ -218,7 +218,7 @@ def calculate_durations(date, df):
     return df.apply(lambda bond: __calculate_duration__(date, bond), axis = 1)
 
 def __calculate_convexity__(date, bond):
-    ytm = bond['YTM']
+    ytm = bond['YTM']/100
     nominal = bond['Price']
     coupon = bond['Coupon'] / 100
     coupon_value = coupon * nominal
@@ -248,7 +248,7 @@ def __calculate_convexity__(date, bond):
         cf = coupon_value if pf < maturity_date else coupon_value + nominal
         payment_flows.append((t, cf))
 
-    bond['Convexity'] = 1/dirty_price * sum((cf * t * (t+1))/(1 + ytm)**(t+2) for t, cf in payment_flows)
+    bond['Convexity'] = 1/dirty_price * sum((cf * t * (t+1))/(1 + ytm)**t for t, cf in payment_flows)
     return bond
 
 def calculate_convexities(date, df):
