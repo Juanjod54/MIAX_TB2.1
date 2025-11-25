@@ -27,7 +27,7 @@ def read_curve(filename):
 def plot_curve(curve):
     curve[['Discount', 'Zero Rate', 'Market Rate']].plot()
 
-def evaluate_bonds(date, df, curve, spread, ytm, marcualay, modificate, convexity):
+def evaluate_bonds(date, df, curve, spread):
     return df.apply(lambda bond: __evaluate_bond__(date, bond, curve, spread), axis = 1)
 
 def __evaluate_bond__(date, bond, curve, bps):
@@ -40,11 +40,9 @@ def __evaluate_bond__(date, bond, curve, bps):
     # Si es perpetuo, cogemos la fecha del proximo call
     if pd.isnull(maturity_date):
         maturity_date = bond['Maturity']
-    #if pd.isnull(maturity_date):
-    #    maturity_date = bond['Next Call Date']
 
     coupon_freq = bond['Coupon Frequency']
-    first_coupon_date = pd.to_datetime(bond['First Coupon Date'])
+    first_coupon_date = bond['First Coupon Date']
     next_coupon_date = first_coupon_date
 
     while (next_coupon_date < date):
@@ -61,7 +59,10 @@ def __evaluate_bond__(date, bond, curve, bps):
         dirty_price = dirty_price + coupon_value * interpolate(curve, next_coupon_date) * math.exp(-spread * t)
         next_coupon_date = next_coupon_date + relativedelta(years=coupon_freq)
 
-    dirty_price = dirty_price + nominal * interpolate(curve, maturity_date) * math.exp(-spread * t)
+    # Sumamos el ultimo cupon y el nominal
+    last_factor = interpolate(curve, maturity_date) * math.exp(-spread * t)
+    dirty_price = dirty_price + coupon_value * last_factor
+    dirty_price = dirty_price + nominal * last_factor
     clean_price = dirty_price - accrued_interest
 
     bond['Clean Price'] = clean_price
@@ -86,6 +87,7 @@ def __z_spread__(date, next_coupon_date, maturity_date, nominal, coupon_value, c
         t = ((maturity_date - date).days) / 365.0
         rt = interpolate(curve, maturity_date, 'Zero Rate') / 100
         df = math.exp(-rt * t)
+        pvz = pvz + coupon_value * df * math.exp(-z_value * t)
         return pvz + nominal * df * math.exp(-z_value * t)
 
 def __calculate_z_spread__(date, bond, curve):
@@ -98,9 +100,6 @@ def __calculate_z_spread__(date, bond, curve):
     # Si es perpetuo, cogemos la fecha del proximo call
     if pd.isnull(maturity_date):
         maturity_date = bond['Maturity']
-    #if pd.isnull(maturity_date):
-    #    maturity_date = bond['Next Call Date']
-
 
     coupon_freq = bond['Coupon Frequency']
     first_coupon_date = pd.to_datetime(bond['First Coupon Date'])
@@ -135,31 +134,29 @@ def calculate_z_spreads(date, df, curve):
     return df.apply(lambda bond: __calculate_z_spread__(date, bond, curve), axis = 1)
 
 
-def __calculate_ytm__(date, bond, curve):
-    coupon = bond['Coupon']
+def __calculate_ytm__(date, bond):
     nominal = bond['Price']
+    coupon = bond['Coupon'] / 100
     coupon_value = coupon * nominal
     
     maturity_date = bond['Next Call Date']
     # Si es perpetuo, cogemos la fecha del proximo call
     if pd.isnull(maturity_date):
         maturity_date = bond['Maturity']
-    #if pd.isnull(maturity_date):
-    #    maturity_date = bond['Next Call Date']
 
     coupon_freq = bond['Coupon Frequency']
     first_coupon_date = pd.to_datetime(bond['First Coupon Date'])
     next_coupon_date = first_coupon_date
 
-    clean_price = bond['Price']
-    z_spread = bond['Z Spread']
-    
-    t = 0
+    dirty_price = bond['Dirty Price']
+
     pay_dates =[]
-    while (next_coupon_date <= maturity_date):
+    while (next_coupon_date < maturity_date):
         if next_coupon_date > date:
             pay_dates.append(next_coupon_date)
-        next_coupon_date += relativedelta(years=coupon_freq)   
+        next_coupon_date += relativedelta(years=coupon_freq)
+
+    pay_dates.append(maturity_date)
 
     payment_flows = []
     for pf in pay_dates:
@@ -169,28 +166,21 @@ def __calculate_ytm__(date, bond, curve):
         else:
             cash_flow = coupon_value + nominal
         payment_flows.append((t, cash_flow))
-      
-    bond['YTM'] = 0
 
-    def result(y):
-        return sum(cf / (1 + y / coupon_freq) ** (coupon_freq * t) for t, cf in payment_flows) - clean_price
+    def result(ytm):
+        return sum(cf / (1 + ytm) ** t for t, cf in payment_flows) - dirty_price
 
+    ytm = root_scalar(result, bracket=[-0.99, 0.99], method='brentq')
+    bond['YTM'] = ytm.root * 100 if ytm.converged else None
+    return bond
 
-   # Verificar cambio de signo
-    low_barrier = 0.0001
-    high_barrier = 1.0
-    if result(low_barrier) * result(high_barrier) > 0:
-        return np.nan
+def calculate_ytms(date, df):
+    return df.apply(lambda bond: __calculate_ytm__(date, bond), axis = 1)
 
-    ytm = root_scalar(result, bracket=[low_barrier, high_barrier], method='brentq') # usando el método de bisección
-    return ytm.root if ytm.converged else None
-
-def calculate_ytms(date, df, curve):
-    return df.apply(lambda bond: __calculate_ytm__(date, bond, curve), axis = 1)
-
-def __calculate_duration__ (date, bond, ytm):
-    coupon = bond['Coupon']
-    nominal = bond['Nominal']
+def __calculate_duration__ (date, bond):
+    ytm = bond['YTM']
+    nominal = bond['Price']
+    coupon = bond['Coupon']/100
     coupon_value = coupon * nominal
     maturity_date = bond['Next Call Date']
     if pd.isnull(maturity_date):
@@ -201,10 +191,12 @@ def __calculate_duration__ (date, bond, ytm):
     next_coupon_date = first_coupon_date
 
     pay_dates = []
-    while next_coupon_date <= maturity_date:
+    while next_coupon_date < maturity_date:
         if next_coupon_date > date:
             pay_dates.append(next_coupon_date)
-        next_coupon_date += relativedelta(months=int(12 / coupon_freq))
+        next_coupon_date += relativedelta(years=coupon_freq)
+
+    pay_dates.append(maturity_date)
 
     payment_flows = []
     for pf in pay_dates:
@@ -212,29 +204,25 @@ def __calculate_duration__ (date, bond, ytm):
         cash_flow = coupon_value if pf < maturity_date else coupon_value + nominal
         payment_flows.append((t, cash_flow))
 
-    bond['Duration_Macaulay'] = 0
-    bond['Duration_Modificada'] = 0
+    numerador = sum(t * (cf/1+ytm)**t for t, cf in payment_flows)
+    denominador = sum((cf/1+ytm)**t for t, cf in payment_flows)
+    dur_macaulay = numerador / denominador
+    dur_modificada = dur_macaulay / (1 + ytm/coupon_freq)
 
-    pv_total = 0
-    pv_ti = 0
-    for t, cf in payment_flows:
-        df = 1 / (1 + ytm / coupon_freq) ** (coupon_freq * t)
-        pv = cf * df
-        pv_total += pv
-        pv_ti += t * pv
+    bond['Duration_Macaulay'] = dur_macaulay
+    bond['Duration_Modificada'] = dur_modificada
 
-    dur_macaulay = pv_ti / pv_total if pv_total > 0 else None
-    dur_modificada = dur_macaulay / (1 + ytm / coupon_freq) if dur_macaulay is not None else None
+    return bond
 
-    return dur_macaulay, dur_modificada
+def calculate_durations(date, df):
+    return df.apply(lambda bond: __calculate_duration__(date, bond), axis = 1)
 
-def calculate_duretations(date, df, curve):
-    return df.apply(lambda bond: __calculate_duration__(date, bond, curve), axis = 1)
-
-def __calculate_convexity__(date, bond, ytm):
+def __calculate_convexity__(date, bond):
+    ytm = bond['YTM']
+    nominal = bond['Price']
     coupon = bond['Coupon'] / 100
-    nominal = bond['Nominal']
     coupon_value = coupon * nominal
+    dirty_price = bond['Dirty Price']
 
     maturity_date = bond['Next Call Date']
     if pd.isnull(maturity_date):
@@ -246,10 +234,12 @@ def __calculate_convexity__(date, bond, ytm):
 
     # Generar fechas de pago
     pay_dates = []
-    while next_coupon_date <= maturity_date:
+    while next_coupon_date < maturity_date:
         if next_coupon_date > date:
             pay_dates.append(next_coupon_date)
-        next_coupon_date += relativedelta(months=int(12 / coupon_freq))
+        next_coupon_date += relativedelta(years=coupon_freq)
+
+    pay_dates.append(maturity_date)
 
     # Generar flujos [(t, cf)]
     payment_flows = []
@@ -258,19 +248,8 @@ def __calculate_convexity__(date, bond, ytm):
         cf = coupon_value if pf < maturity_date else coupon_value + nominal
         payment_flows.append((t, cf))
 
-    bond['Convexity'] = 0
-    # Calcular convexidad
-    convexity_numerador = 0
-    pv_total = 0
-    for t, cf in payment_flows:
-        df = 1 / (1 + ytm / coupon_freq) ** (coupon_freq * t)
-        pv = cf * df
-        factor = t * (t + 1 / coupon_freq)
-        convexity_numerador += pv * factor
-        pv_total += pv
-    
-    convexity = convexity_numerador / (pv_total * (1 + ytm / coupon_freq) ** 2) if pv_total > 0 else None
-    return convexity
+    bond['Convexity'] = 1/dirty_price * sum((cf * t * (t+1))/(1 + ytm)**(t+2) for t, cf in payment_flows)
+    return bond
 
-def calculate_convexities(date, df, curve):
-    return df.apply(lambda bond: __calculate_convexity__(date, bond, curve), axis = 1)
+def calculate_convexities(date, df):
+    return df.apply(lambda bond: __calculate_convexity__(date, bond), axis = 1)
