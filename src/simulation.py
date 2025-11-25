@@ -27,8 +27,8 @@ def read_curve(filename):
 def plot_curve(curve):
     curve[['Discount', 'Zero Rate', 'Market Rate']].plot()
 
-def evaluate_bonds(date, df, curve, spread):
-    return df.apply(lambda bond: __evaluate_bond__(date, bond, curve, spread), axis = 1)
+def evaluate_bonds(date, df, curve, spread, ytm, marcualay, modificate, convexity):
+    return df.apply(lambda bond: __evaluate_bond__(date, bond, curve, spread, ytm, marcualay, modificate, convexity), axis = 1)
 
 def __evaluate_bond__(date, bond, curve, bps):
     dirty_price = 0
@@ -208,7 +208,8 @@ def __calculate_duration__ (date, bond, ytm):
         cash_flow = coupon_value if pf < maturity_date else coupon_value + nominal
         payment_flows.append((t, cash_flow))
 
-    bond['Duration'] = 0
+    bond['Duration_Macaulay'] = 0
+    bond['Duration_Modificada'] = 0
 
     pv_total = 0
     pv_ti = 0
