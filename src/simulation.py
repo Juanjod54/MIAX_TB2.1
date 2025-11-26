@@ -1,10 +1,8 @@
 import math
 import datetime
-from zlib import Z_NO_FLUSH
 import numpy as np
 import pandas as pd
 from pathlib import Path
-import matplotlib.pyplot as plt
 from dateutil.relativedelta import relativedelta
 from scipy.optimize import root_scalar
 
@@ -206,8 +204,8 @@ def __calculate_duration__ (date, bond):
         cash_flow = coupon_value if pf < maturity_date else coupon_value + nominal
         payment_flows.append((t, cash_flow))
 
-    numerador = sum(t * (cf/1+ytm)**t for t, cf in payment_flows)
-    denominador = sum((cf/1+ytm)**t for t, cf in payment_flows)
+    numerador = sum(t * (cf/(1+ytm)**t) for t, cf in payment_flows)
+    denominador = sum((cf/(1+ytm)**t) for t, cf in payment_flows)
     dur_macaulay = numerador / denominador
     dur_modificada = dur_macaulay / (1 + ytm/coupon_freq)
 
