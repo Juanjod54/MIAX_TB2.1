@@ -19,6 +19,8 @@ def read_curve(filename):
     # Ruta relativa desde src/ hacia data/ (un nivel arriba)
     data_path = Path(__file__).parent.parent / 'data' / filename
     curve = pd.read_csv(data_path, sep=';', encoding='utf-8-sig')
+    curve['Zero Rate'] = curve['Zero Rate'] / 100
+    curve['Market Rate'] = curve['Market Rate'] / 100
     curve.index = curve['Date']
     # Convertimos las fechas a ln(timestamp) para poder interpolar posteriormente
     curve['ln(Date)'] = curve['Date'].apply(to_ln_timestamp)
@@ -34,7 +36,7 @@ def __evaluate_bond__(date, bond, curve, bps):
     dirty_price = 0
     spread = bps / 10000
     coupon = bond['Coupon']
-    nominal = bond['Price']
+    nominal = 100#He cambiado esto. en la valoración anterio estaba calculando el cupon como el precio actual del bono, y eso no es correcto, el cupon es fijo del bono
     coupon_value = coupon/100 * nominal
     maturity_date = bond['Next Call Date']
     # Si es perpetuo, cogemos la fecha del proximo call
