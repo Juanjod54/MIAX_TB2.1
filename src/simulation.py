@@ -253,3 +253,20 @@ def __calculate_convexity__(date, bond):
 
 def calculate_convexities(date, df):
     return df.apply(lambda bond: __calculate_convexity__(date, bond), axis = 1)
+
+def get_accrued_interest(bond, date):
+    coupon = bond['Coupon']
+    nominal = bond['Outstanding Amount']
+    coupon_value = coupon / 100 * nominal
+
+    coupon_freq = bond['Coupon Frequency']
+    first_coupon_date = bond['First Coupon Date']
+    next_coupon_date = first_coupon_date
+
+    while (next_coupon_date < date):
+        next_coupon_date = next_coupon_date + relativedelta(years=coupon_freq)
+    last_coupon_date = next_coupon_date - relativedelta(years=coupon_freq)
+
+    coupon_rate = (next_coupon_date - last_coupon_date).days
+    days_from_last_coupon_payment = (date - last_coupon_date).days
+    return coupon_value * (days_from_last_coupon_payment / coupon_rate if coupon_rate > 0 else 0)
