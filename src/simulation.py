@@ -19,6 +19,8 @@ def read_curve(filename):
     # Ruta relativa desde src/ hacia data/ (un nivel arriba)
     data_path = Path(__file__).parent.parent / 'data' / filename
     curve = pd.read_csv(data_path, sep=';', encoding='utf-8-sig')
+    curve['Zero Rate'] = curve['Zero Rate'] / 100
+    curve['Market Rate'] = curve['Market Rate'] / 100
     curve.index = curve['Date']
     # Convertimos las fechas a ln(timestamp) para poder interpolar posteriormente
     curve['ln(Date)'] = curve['Date'].apply(to_ln_timestamp)
@@ -34,7 +36,7 @@ def __evaluate_bond__(date, bond, curve, bps):
     dirty_price = 0
     spread = bps / 10000
     coupon = bond['Coupon']
-    nominal = bond['Price']
+    nominal = 100
     coupon_value = coupon/100 * nominal
     maturity_date = bond['Next Call Date']
     # Si es perpetuo, cogemos la fecha del proximo call
@@ -94,7 +96,7 @@ def __calculate_z_spread__(date, bond, curve):
     market_price = bond['Market Price']
 
     coupon = bond['Coupon']
-    nominal = bond['Price']
+    nominal = 100  # Usa nominal fijo en lugar de bond['Price']
     coupon_value = coupon/100 * nominal
     maturity_date = bond['Next Call Date']
     # Si es perpetuo, cogemos la fecha del proximo call
@@ -135,7 +137,7 @@ def calculate_z_spreads(date, df, curve):
 
 
 def __calculate_ytm__(date, bond):
-    nominal = bond['Price']
+    nominal = 100  #  Usa nominal fijo en lugar de bond['Price']
     coupon = bond['Coupon'] / 100
     coupon_value = coupon * nominal
     
@@ -179,7 +181,7 @@ def calculate_ytms(date, df):
 
 def __calculate_duration__ (date, bond):
     ytm = bond['YTM']/100
-    nominal = bond['Price']
+    nominal = 100  # CORREGIDO: Usar nominal fijo en lugar de bond['Price']
     coupon = bond['Coupon']/100
     coupon_value = coupon * nominal
     maturity_date = bond['Next Call Date']
@@ -219,7 +221,7 @@ def calculate_durations(date, df):
 
 def __calculate_convexity__(date, bond):
     ytm = bond['YTM']/100
-    nominal = bond['Price']
+    nominal = 100  # Usa nominal fijo en lugar de bond['Price']
     coupon = bond['Coupon'] / 100
     coupon_value = coupon * nominal
     dirty_price = bond['Dirty Price']
